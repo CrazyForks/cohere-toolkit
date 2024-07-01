@@ -17,8 +17,8 @@ const usePersistedStore = create<PersistedStore>()(
       ...createSettingsSlice(...a),
     }),
     {
-      name: 'settings',
-      version: 1,
+      name: 'persisted-store',
+      version: 2,
     }
   )
 );

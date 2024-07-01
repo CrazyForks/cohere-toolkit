@@ -3,7 +3,7 @@ import { forwardRef, useEffect, useState } from 'react';
 import { useLongPress } from 'react-aria';
 
 import { Avatar } from '@/components/Avatar';
-import IconButton from '@/components/IconButton';
+import { IconButton } from '@/components/IconButton';
 import { LongPressMenu } from '@/components/LongPressMenu';
 import { MessageContent } from '@/components/MessageContent';
 import {
@@ -49,7 +49,7 @@ const MessageRow = forwardRef<HTMLDivElement, Props>(function MessageRowInternal
 
   const [isShowing, setIsShowing] = useState(false);
   const [isLongPressMenuOpen, setIsLongPressMenuOpen] = useState(false);
-  const [isStepsExpanded, setIsStepsExpanded] = useState<boolean>(isLast);
+  const [isStepsExpanded, setIsStepsExpanded] = useState<boolean>(true);
   const {
     citations: { selectedCitation, hoveredGenerationId },
     hoverCitation,
@@ -81,12 +81,6 @@ const MessageRow = forwardRef<HTMLDivElement, Props>(function MessageRowInternal
       setTimeout(() => setIsShowing(true), 300);
     }
   }, []);
-
-  useEffect(() => {
-    if (isLast) {
-      setIsStepsExpanded(true);
-    }
-  }, [isLast]);
 
   const [highlightMessage, setHighlightMessage] = useState(false);
   const prevSelectedCitationGenId = usePreviousDistinct(selectedCitation?.generationId);

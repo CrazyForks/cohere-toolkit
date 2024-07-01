@@ -72,7 +72,6 @@ class HuggingFaceDeployment(BaseDeployment):
         yield {
             "event-type": "event-start",
             "generation_id": "",
-            "is_finished": False,
         }
 
         gen_text = self.invoke_chat(chat_request)
@@ -80,25 +79,12 @@ class HuggingFaceDeployment(BaseDeployment):
         yield {
             "event-type": "text-generation",
             "text": gen_text.get("text", ""),
-            "is_finished": False,
         }
 
         yield {
             "event-type": "stream-end",
-            "is_finished": True,
             "finish_reason": "COMPLETE",
         }
-
-    def invoke_search_queries(
-        self,
-        message: str,
-        chat_history: List[Dict[str, str]] | None = None,
-        **kwargs: Any,
-    ) -> list[str]:
-        logging.warning(
-            "invoke_search_queries not implemented for HuggingFaceDeployment"
-        )
-        return []
 
     def invoke_rerank(
         self, query: str, documents: List[Dict[str, Any]], **kwargs: Any

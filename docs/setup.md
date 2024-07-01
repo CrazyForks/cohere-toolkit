@@ -5,9 +5,13 @@
 Try the default Toolkit application yourself by deploying it in a container locally. You will need to have [Docker](https://www.docker.com/products/docker-desktop/) and [Docker-compose >= 2.22](https://docs.docker.com/compose/install/) installed.
 
 ```bash
-
 docker run -e COHERE_API_KEY='>>YOUR_API_KEY<<' -p 8000:8000 -p 4000:4000 ghcr.io/cohere-ai/cohere-toolkit:latest
+```
 
+If you need to use community features, you can run the container with the following command:
+
+```bash
+docker run -e INSTALL_COMMUNITY_DEPS='true' -e COHERE_API='>>YOUR_API_KEY<<' -p 8000:8000 -p 4000:4000 ghcr.io/cohere-ai/cohere-toolkit:latest
 ```
 
 Go to localhost:4000 in your browser and start chatting with the model. This will use the model hosted on Cohere's platform. If you want to add your own tools or use another model, follow the instructions below to fork the repository.
@@ -20,7 +24,8 @@ Clone the repo and run
 make first-run
 ```
 
-Follow the instructions to configure the model - either AWS Sagemaker, Azure, or Cohere's platform. This can also be done by running `make setup` (See Option 2 below), which will help generate a file for you, or by manually creating a `.env` file and copying the contents of the provided `.env-template`. Then replacing the values with the correct ones.
+Follow the instructions to configure the model - either AWS Sagemaker, Bedrock, Azure, or Cohere's platform. This can also be done by running `make setup` (See Option 2 below), which will help generate a file for you, or by manually creating a `.env` file and copying the contents of the provided `.env-template`. Then replacing the values with the correct ones.
+For Windows systems see the detailed setup below.
 
 #### Detailed environment setup
 
@@ -29,41 +34,49 @@ Follow the instructions to configure the model - either AWS Sagemaker, Azure, or
 
 1. Install [docker](https://docs.docker.com/desktop/install/windows-install/)
 2. Install [git]https://git-scm.com/download/win
-3. In PowerShell (Terminal), install [scoop](https://scoop.sh/). After installing, run scoop bucket add extras
-4. Install pipx
+3. In PowerShell (Terminal), install [scoop](https://scoop.sh/). After installing, run the following commands:
 ```bash
-scoop install pipx
-pipx ensurepath
+scoop bucket add extras
 ```
-5. Install poetry >= 1.7.1 using 
-```bash
-pipx install poetry
-```
-6. Install miniconda using
+4. Install miniconda using
 ```bash
 scoop install miniconda3
-conda init powershell
+conda init cmd.exe
 ```
-7. Restart PowerShell
-8. Install the following:
+5. Restart PowerShell
+6. Install the following:
 ```bash
 scoop install postgresql
 scoop install make
 ```
-9. Create a new virtual environment with Python 3.11
+7. Create a new virtual environment with Python 3.11 using CMD terminal
 ```bash
 conda create -n toolkit python=3.11
 conda activate toolkit
 ```
-10. Clone the repo
-11. Alternatively to `make first-run` or `make setup`, run
+8. Install poetry == 1.7.1 using 
 ```bash
-poetry install --only setup --verbose
+pip install poetry==1.7.1
+```
+9. Clone the repo
+10. Alternatively to `make win-first-run` or `make win-setup`, run
+```bash
+poetry install --with setup,community --verbose
 poetry run python src/backend/cli/main.py
 make migrate
 make dev
 ```
-12. Navigate to https://localhost:4000 in your browser
+11. Navigate to https://localhost:4000 in your browser
+
+### Possible issues
+- If you encounter on error on running `poetry install` related to `llama-cpp-python`, please run the following command:
+```bash
+poetry source add llama-cpp-python https://abetlen.github.io/llama-cpp-python/whl/cpu
+poetry source add pypi
+poetry lock
+```
+and then run the commands in step 10 again.
+For more information and additional installation instructions, see [llama-cpp-python documentation](https://github.com/abetlen/llama-cpp-python)
 
 </details>
 
@@ -114,6 +127,7 @@ And then retry `poetry --version`
 - `COHERE_API_KEY`: If your application will interface with Cohere's API, you will need to supply an API key. Not required if using AWS Sagemaker or Azure.
   Sign up at https://dashboard.cohere.com/ to create an API key.
 - `NEXT_PUBLIC_API_HOSTNAME`: The backend URL which the frontend will communicate with. Defaults to http://backend:8000 for use with `docker compose`
+- `FRONTEND_HOSTNAME`: The URL for the frontend client. Defaults to http://localhost:4000
 - `DATABASE_URL`: Your PostgreSQL database connection string for SQLAlchemy, should follow the format `postgresql+psycopg2://USER:PASSWORD@HOST:PORT`.
 
 ### AWS Sagemaker
@@ -125,6 +139,13 @@ Then you will need to set up authorization, [see more details here](https://aws.
 - `SAGE_MAKER_REGION_NAME`: The region you configured for the model.
 - `SAGE_MAKER_ENDPOINT_NAME`: The name of the endpoint which you created in the notebook.
 - `SAGE_MAKER_PROFILE_NAME`: Your AWS profile name
+
+### Bedrock
+
+- `BEDROCK_ACCESS_KEY`: Your Bedrock access key.
+- `BEDROCK_SECRET_KEY`: Your Bedrock secret key.
+- `BEDROCK_SESSION_TOKEN`: Your Bedrock session token.
+- `BEDROCK_REGION_NAME`: The region you configured for the model.
 
 ### Hosted tools
 
@@ -200,6 +221,11 @@ Install your dependencies:
 poetry install
 ```
 
+if you need to install the community features, run:
+```bash
+poetry install --with community
+```
+
 Run linters:
 
 ```bash
@@ -208,7 +234,7 @@ poetry run isort .
 ```
 
 ## Setting up the Environment Variables
-**Please confirm that you have at least one configuration of the Cohere Platform, SageMaker or Azure.**
+**Please confirm that you have at least one configuration of the Cohere Platform, SageMaker, Bedrock or Azure.**
 
 You have two methods to set up the environment variables:
 1. Run `make setup` and follow the instructions to configure it.

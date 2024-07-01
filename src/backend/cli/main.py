@@ -1,3 +1,4 @@
+import argparse
 from enum import StrEnum
 
 import inquirer
@@ -25,6 +26,7 @@ class DeploymentName(StrEnum):
     COHERE_PLATFORM = "Cohere Platform"
     SAGE_MAKER = "SageMaker"
     AZURE = "Azure"
+    BEDROCK = "Bedrock"
 
 
 class ToolName(StrEnum):
@@ -42,7 +44,8 @@ WELCOME_MESSAGE = r"""
 """
 DATABASE_URL_DEFAULT = "postgresql+psycopg2://postgres:postgres@db:5432"
 PYTHON_INTERPRETER_URL_DEFAULT = "http://terrarium:8080"
-NEXT_PUBLIC_API_HOSTNAME_DEFAULT = "http://backend:8000"
+NEXT_PUBLIC_API_HOSTNAME_DEFAULT = "http://localhost:8000"
+FRONTEND_HOSTNAME_DEFAULT = "http://localhost:4000"
 
 DOT_ENV_FILE_PATH = ".env"
 
@@ -80,8 +83,15 @@ def database_url_prompt(secrets):
         default=NEXT_PUBLIC_API_HOSTNAME_DEFAULT,
     )
 
+    print_styled("💾 And now the hostname for the frontend client")
+    frontend_hostname = inquirer.text(
+        "Enter your public API Hostname or press enter for default [recommended]",
+        default=FRONTEND_HOSTNAME_DEFAULT,
+    )
+
     secrets["DATABASE_URL"] = database_url
     secrets["NEXT_PUBLIC_API_HOSTNAME"] = next_public_api_hostname
+    secrets["FRONTEND_HOSTNAME"] = frontend_hostname
 
 
 def deployment_prompt(secrets, configs):
@@ -119,7 +129,7 @@ def review_variables_prompt(secrets):
     questions = [
         inquirer.Checkbox(
             "variables",
-            message="Review your variables and select the ones you want to update, if any",
+            message="Review your variables and select the ones you want to update, if any. Press enter to continue",
             choices=review_list,
         ),
     ]
@@ -141,6 +151,13 @@ def update_variable_prompt(_, variables_to_update):
 def write_env_file(secrets):
     for key, value in secrets.items():
         set_key(DOT_ENV_FILE_PATH, key, str(value))
+
+    set_key(
+        DOT_ENV_FILE_PATH,
+        "NEXT_PUBLIC_FRONTEND_HOSTNAME",
+        "${FRONTEND_HOSTNAME}",
+        "never",
+    )
 
 
 def select_deployments_prompt(deployments, _):
@@ -187,7 +204,7 @@ def show_examples():
         bcolors.OKCYAN,
     )
     print_styled(
-        """\tcurl --location 'http://localhost:8000/chat-stream' --header 'User-Id: test-user' --header 'Content-Type: application/json' --data '{"message": "hey"}'""",
+        """\tcurl --location 'http://localhost:8000/v1/chat-stream' --header 'User-Id: test-user' --header 'Content-Type: application/json' --data '{"message": "hey"}'""",
         bcolors.OKCYAN,
     )
 
@@ -196,7 +213,7 @@ def show_examples():
         bcolors.OKCYAN,
     )
     print_styled(
-        """\tcurl --location 'http://localhost:8000/chat-stream' --header 'User-Id: test-user' --header 'Deployment-Name: SageMaker' --header 'Content-Type: application/json' --data '{"message": "hey"}'""",
+        """\tcurl --location 'http://localhost:8000/v1/chat-stream' --header 'User-Id: test-user' --header 'Deployment-Name: SageMaker' --header 'Content-Type: application/json' --data '{"message": "hey"}'""",
         bcolors.OKCYAN,
     )
 
@@ -235,6 +252,10 @@ TOOLS = {
 
 
 def start():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--use-community", action=argparse.BooleanOptionalAction)
+    args = parser.parse_args()
+
     secrets = {}
     print_styled(WELCOME_MESSAGE, bcolors.OKGREEN)
     print_styled(
@@ -246,7 +267,7 @@ def start():
         implementation(secrets)
 
     # SET UP TOOLS
-    use_community_features = community_tools_prompt(secrets)
+    use_community_features = args.use_community and community_tools_prompt(secrets)
     if use_community_features:
         TOOLS.update(COMMUNITY_TOOLS_SETUP)
 

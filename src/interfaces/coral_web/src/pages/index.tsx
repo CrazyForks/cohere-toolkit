@@ -7,7 +7,7 @@ import Conversation from '@/components/Conversation';
 import ConversationListPanel from '@/components/ConversationList/ConversationListPanel';
 import { Layout, LayoutSection } from '@/components/Layout';
 import { BannerContext } from '@/context/BannerContext';
-import { useListDeployments } from '@/hooks/deployments';
+import { useListAllDeployments } from '@/hooks/deployments';
 import { useExperimentalFeatures } from '@/hooks/experimentalFeatures';
 import { appSSR } from '@/pages/_app';
 import { useCitationsStore, useConversationStore, useParamsStore } from '@/stores';
@@ -25,8 +25,9 @@ const ChatPage: NextPage<Props> = () => {
   const {
     params: { deployment },
     setParams,
+    resetFileParams,
   } = useParamsStore();
-  const { data: availableDeployments } = useListDeployments();
+  const { data: allDeployments } = useListAllDeployments();
   const { data: experimentalFeatures } = useExperimentalFeatures();
   const isLangchainModeOn = !!experimentalFeatures?.USE_EXPERIMENTAL_LANGCHAIN;
   const { setMessage } = useContext(BannerContext);
@@ -34,13 +35,17 @@ const ChatPage: NextPage<Props> = () => {
   useEffect(() => {
     resetConversation();
     resetCitations();
+    resetFileParams();
   }, []);
 
   useEffect(() => {
-    if (!deployment && availableDeployments && availableDeployments?.length > 0) {
-      setParams({ deployment: availableDeployments[0].name });
+    if (!deployment && allDeployments) {
+      const firstAvailableDeployment = allDeployments.find((d) => d.is_available);
+      if (firstAvailableDeployment) {
+        setParams({ deployment: firstAvailableDeployment.name });
+      }
     }
-  }, [deployment, availableDeployments]);
+  }, [deployment, allDeployments]);
 
   useEffect(() => {
     if (!isLangchainModeOn) return;

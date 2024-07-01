@@ -27,6 +27,63 @@ def test_list_conversations(session_client: TestClient, session: Session) -> Non
     assert len(results) == 1
 
 
+def test_list_conversations_with_agent(
+    session_client: TestClient, session: Session
+) -> None:
+    agent = get_factory("Agent", session).create(
+        id="agent_id", name="test agent", user_id="123"
+    )
+    conversation1 = get_factory("Conversation", session).create(
+        agent_id="agent_id", user_id="123"
+    )
+    _ = get_factory("Conversation", session).create(user_id="123")
+
+    response = session_client.get(
+        "/v1/conversations", headers={"User-Id": "123"}, params={"agent_id": "agent_id"}
+    )
+    results = response.json()
+
+    assert response.status_code == 200
+    assert len(results) == 1
+
+    conversation = results[0]
+    assert conversation["id"] == conversation1.id
+
+
+def test_list_conversation_with_deleted_agent(
+    session_client: TestClient, session: Session
+) -> None:
+    agent = get_factory("Agent", session).create(
+        id="agent_id", name="test agent", user_id="123"
+    )
+    conversation = get_factory("Conversation", session).create(
+        agent_id="agent_id", user_id="123"
+    )
+
+    response = session_client.get(
+        "/v1/conversations", headers={"User-Id": "123"}, params={"agent_id": "agent_id"}
+    )
+    results = response.json()
+
+    assert response.status_code == 200
+    assert len(results) == 1
+    assert results[0]["id"] == conversation.id
+
+    # Delete agent and check that conversation is also deleted
+    response = session_client.delete(
+        f"/v1/agents/{agent.id}", headers={"User-Id": "123"}
+    )
+    assert response.status_code == 200
+
+    response = session_client.get(
+        "/v1/conversations", headers={"User-Id": "123"}, params={"agent_id": "agent_id"}
+    )
+    results = response.json()
+
+    assert response.status_code == 200
+    assert len(results) == 0
+
+
 def test_list_conversations_missing_user_id(
     session_client: TestClient, session: Session
 ) -> None:
@@ -379,66 +436,6 @@ def test_list_files_missing_user_id(
     assert response.json() == {"detail": "User-Id required in request headers."}
 
 
-def test_upload_file_on_conversation(
-    session_client: TestClient, session: Session
-) -> None:
-    file_path = "src/backend/tests/test_data/Mariana_Trench.pdf"
-    saved_file_path = "src/backend/data/Mariana_Trench.pdf"
-    conversation = get_factory("Conversation", session).create()
-    file_doc = {"file": open(file_path, "rb")}
-    response = session_client.post(
-        f"/v1/conversations/{conversation.id}/upload_file",
-        files=file_doc,
-        headers={"User-Id": conversation.user_id},
-    )
-    response_file = response.json()
-
-    assert response.status_code == 200
-    assert "Mariana_Trench" in response_file["file_name"]
-    assert response_file["conversation_id"] == conversation.id
-    assert response_file["user_id"] == conversation.user_id
-
-    # Clean up - remove the file from the directory
-    os.remove(saved_file_path)
-
-
-def test_fail_upload_file_on_conversation_missing_data(
-    session_client: TestClient, session: Session
-) -> None:
-    conversation = get_factory("Conversation", session).create()
-    response = session_client.post(
-        f"/v1/conversations/{conversation.id}/upload_file",
-        json={},
-        headers={"User-Id": conversation.user_id},
-    )
-    response_file = response.json()
-
-    assert response.status_code == 422
-    assert response_file == {
-        "detail": [
-            {
-                "type": "missing",
-                "loc": ["body", "file"],
-                "msg": "Field required",
-                "input": None,
-                "url": "https://errors.pydantic.dev/2.7/v/missing",
-            }
-        ]
-    }
-
-
-def test_upload_file_on_conversation_missing_user_id(
-    session_client: TestClient, session: Session
-) -> None:
-    conversation = get_factory("Conversation", session).create()
-    response = session_client.post(
-        f"/v1/conversations/{conversation.id}/upload_file", json={}
-    )
-
-    assert response.status_code == 401
-    assert response.json() == {"detail": "User-Id required in request headers."}
-
-
 def test_upload_file_existing_conversation(
     session_client: TestClient, session: Session
 ) -> None:
@@ -461,8 +458,8 @@ def test_upload_file_existing_conversation(
     assert file["conversation_id"] == conversation.id
     assert file["user_id"] == conversation.user_id
 
-    # Clean up - remove the file from the directory
-    os.remove(saved_file_path)
+    # File should not exist in the directory
+    assert not os.path.exists(saved_file_path)
 
 
 def test_upload_file_nonexistent_conversation_creates_new_conversation(
@@ -489,8 +486,8 @@ def test_upload_file_nonexistent_conversation_creates_new_conversation(
     assert "Mariana_Trench" in file["file_name"]
     assert file["conversation_id"] == created_conversation.id
 
-    # Clean up - remove the file from the directory
-    os.remove(saved_file_path)
+    # File should not exist in the directory
+    assert not os.path.exists(saved_file_path)
 
 
 def test_upload_file_nonexistent_conversation_fails_if_user_id_not_provided(

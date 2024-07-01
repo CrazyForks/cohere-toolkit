@@ -1,11 +1,29 @@
+import logging
 import os
+import threading
+import time
 from typing import Any, Dict, Generator, List
 
 import cohere
+from cohere.core.api_error import ApiError
 from cohere.types import StreamedChatResponse
 
+from backend.chat.collate import to_dict
+from backend.chat.enums import StreamEvent
 from backend.model_deployments.base import BaseDeployment
+from backend.model_deployments.utils import get_model_config_var
 from backend.schemas.cohere_chat import CohereChatRequest
+from backend.services.metrics import (
+    collect_metrics_chat,
+    collect_metrics_chat_stream,
+    collect_metrics_rerank,
+)
+
+AZURE_API_KEY_ENV_VAR = "AZURE_API_KEY"
+# Example URL: "https://<endpoint>.<region>.inference.ai.azure.com/v1"
+# Note: It must have /v1 and it should not have /chat
+AZURE_CHAT_URL_ENV_VAR = "AZURE_CHAT_ENDPOINT_URL"
+AZURE_ENV_VARS = [AZURE_API_KEY_ENV_VAR, AZURE_CHAT_URL_ENV_VAR]
 
 
 class AzureDeployment(BaseDeployment):
@@ -16,14 +34,15 @@ class AzureDeployment(BaseDeployment):
     """
 
     DEFAULT_MODELS = ["azure-command"]
-    api_key = os.environ.get("AZURE_API_KEY")
-    # Example URL: "https://<endpoint>.<region>.inference.ai.azure.com/v1"
-    # Note: It must have /v1 and it should not have /chat
-    chat_endpoint_url = os.environ.get("AZURE_CHAT_ENDPOINT_URL")
 
-    def __init__(self):
+    def __init__(self, **kwargs: Any):
+        # Override the environment variable from the request
+        self.api_key = get_model_config_var(AZURE_API_KEY_ENV_VAR, **kwargs)
+        self.chat_endpoint_url = get_model_config_var(AZURE_CHAT_URL_ENV_VAR, **kwargs)
+
         if not self.chat_endpoint_url.endswith("/v1"):
             self.chat_endpoint_url = self.chat_endpoint_url + "/v1"
+        print("Azure chat endpoint url: ", self.chat_endpoint_url)
         self.client = cohere.Client(
             base_url=self.chat_endpoint_url, api_key=self.api_key
         )
@@ -41,46 +60,29 @@ class AzureDeployment(BaseDeployment):
 
     @classmethod
     def is_available(cls) -> bool:
-        return all([cls.api_key is not None, cls.chat_endpoint_url is not None])
+        return all([os.environ.get(var) is not None for var in AZURE_ENV_VARS])
 
+    @collect_metrics_chat
     def invoke_chat(self, chat_request: CohereChatRequest, **kwargs: Any) -> Any:
-        return self.client.chat(
-            **chat_request.model_dump(exclude={"stream"}),
+        response = self.client.chat(
+            **chat_request.model_dump(exclude={"stream", "file_ids"}),
             **kwargs,
         )
+        yield to_dict(response)
 
+    @collect_metrics_chat_stream
     def invoke_chat_stream(
         self, chat_request: CohereChatRequest, **kwargs: Any
     ) -> Generator[StreamedChatResponse, None, None]:
         stream = self.client.chat_stream(
-            **chat_request.model_dump(exclude={"stream"}),
+            **chat_request.model_dump(exclude={"stream", "file_ids"}),
             **kwargs,
         )
+
         for event in stream:
-            yield event.__dict__
-
-    def invoke_search_queries(
-        self,
-        message: str,
-        chat_history: List[Dict[str, str]] | None = None,
-        **kwargs: Any,
-    ) -> list[str]:
-        res = self.client.chat(
-            message=message,
-            chat_history=chat_history,
-            search_queries_only=True,
-            **kwargs,
-        )
-
-        if not res.search_queries:
-            return []
-
-        return [s.text for s in res.search_queries]
+            yield to_dict(event)
 
     def invoke_rerank(
         self, query: str, documents: List[Dict[str, Any]], **kwargs: Any
     ) -> Any:
         return None
-
-    def invoke_tools(self, message: str, tools: List[Any], **kwargs: Any) -> List[Any]:
-        return self.client.chat(message=message, tools=tools, **kwargs)

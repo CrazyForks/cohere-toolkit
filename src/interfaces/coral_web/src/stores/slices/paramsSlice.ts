@@ -1,6 +1,7 @@
 import { StateCreator } from 'zustand';
 
 import { CohereChatRequest, DEFAULT_CHAT_TEMPERATURE } from '@/cohere-client';
+import { isDefaultFileLoaderTool } from '@/utils';
 
 import { StoreState } from '..';
 
@@ -11,6 +12,7 @@ const INITIAL_STATE = {
   tools: [],
   fileIds: [],
   deployment: undefined,
+  deploymentConfig: undefined,
 };
 
 export type ConfigurableParams = Pick<CohereChatRequest, 'temperature' | 'tools'> & {
@@ -18,11 +20,13 @@ export type ConfigurableParams = Pick<CohereChatRequest, 'temperature' | 'tools'
   fileIds: CohereChatRequest['file_ids'];
   model?: string;
   deployment?: string;
+  deploymentConfig?: string;
 };
 
 type State = ConfigurableParams;
 type Actions = {
   setParams: (params?: Partial<ConfigurableParams> | null) => void;
+  resetFileParams: VoidFunction;
 };
 
 export type ParamStore = {
@@ -41,6 +45,17 @@ export const createParamsSlice: StateCreator<StoreState, [], [], ParamStore> = (
           ...params,
           ...(tools ? { tools } : []),
           ...(fileIds ? { fileIds } : {}),
+        },
+      };
+    });
+  },
+  resetFileParams() {
+    set((state) => {
+      return {
+        params: {
+          ...state.params,
+          fileIds: [],
+          tools: state.params?.tools?.filter((t) => !isDefaultFileLoaderTool(t)),
         },
       };
     });

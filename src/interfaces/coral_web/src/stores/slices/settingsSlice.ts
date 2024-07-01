@@ -2,12 +2,14 @@ import { StateCreator } from 'zustand';
 
 const INITIAL_STATE: Required<State> = {
   isConfigDrawerOpen: false,
+  activeConfigDrawerTab: '',
   isConvListPanelOpen: true,
   isMobileConvListPanelOpen: false,
 };
 
 type State = {
   isConfigDrawerOpen: boolean;
+  activeConfigDrawerTab: string;
   isConvListPanelOpen: boolean;
   isMobileConvListPanelOpen: boolean;
 };

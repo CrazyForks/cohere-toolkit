@@ -9,13 +9,17 @@ import { ConversationError } from '@/components/ConversationError';
 import ConversationListPanel from '@/components/ConversationList/ConversationListPanel';
 import { Layout, LayoutSection } from '@/components/Layout';
 import { Spinner } from '@/components/Shared';
+import { TOOL_PYTHON_INTERPRETER_ID } from '@/constants';
 import { BannerContext } from '@/context/BannerContext';
 import { useConversation } from '@/hooks/conversation';
-import { useListDeployments } from '@/hooks/deployments';
+import { useListAllDeployments } from '@/hooks/deployments';
 import { useExperimentalFeatures } from '@/hooks/experimentalFeatures';
 import { appSSR } from '@/pages/_app';
 import { useCitationsStore, useConversationStore, useParamsStore } from '@/stores';
+import { OutputFiles } from '@/stores/slices/citationsSlice';
+import { getQueryString } from '@/utils';
 import { createStartEndKey, mapHistoryToMessages } from '@/utils';
+import { parsePythonInterpreterToolFields } from '@/utils/tools';
 
 type Props = {
   reactQueryState: DehydratedState;
@@ -26,27 +30,44 @@ const ConversationPage: NextPage<Props> = () => {
   const {
     params: { deployment },
     setParams,
+    resetFileParams,
   } = useParamsStore();
   const { setConversation } = useConversationStore();
-  const { addCitation, resetCitations } = useCitationsStore();
+  const { addCitation, resetCitations, saveOutputFiles } = useCitationsStore();
   const { data: experimentalFeatures } = useExperimentalFeatures();
   const isLangchainModeOn = !!experimentalFeatures?.USE_EXPERIMENTAL_LANGCHAIN;
   const { setMessage } = useContext(BannerContext);
 
-  const urlConversationId = Array.isArray(router.query.id)
-    ? router.query.id[0]
-    : (router.query.id as string);
+  const urlConversationId = getQueryString(router.query.id);
 
   const {
     data: conversation,
     isLoading,
     isError,
     error,
-  } = useConversation({ conversationId: urlConversationId });
-  const { data: availableDeployments } = useListDeployments();
+  } = useConversation({
+    conversationId: urlConversationId,
+  });
+  const { data: allDeployments } = useListAllDeployments();
+
+  useEffect(() => {
+    if (!deployment && allDeployments) {
+      const firstAvailableDeployment = allDeployments.find((d) => d.is_available);
+      if (firstAvailableDeployment) {
+        setParams({ deployment: firstAvailableDeployment.name });
+      }
+    }
+  }, [deployment]);
+
+  useEffect(() => {
+    if (!isLangchainModeOn) return;
+    setMessage('You are using an experimental langchain multihop flow. There will be bugs.');
+  }, [isLangchainModeOn]);
 
   useEffect(() => {
     resetCitations();
+    resetFileParams();
+    setParams({ tools: [] });
 
     if (urlConversationId) {
       setConversation({ id: urlConversationId });
@@ -59,35 +80,40 @@ const ConversationPage: NextPage<Props> = () => {
     const messages = mapHistoryToMessages(
       conversation?.messages?.sort((a, b) => a.position - b.position)
     );
+
     setConversation({ name: conversation.title, messages });
-  }, [conversation?.id, setConversation]);
 
-  useEffect(() => {
-    if (!deployment && availableDeployments && availableDeployments?.length > 0) {
-      setParams({ deployment: availableDeployments[0].name });
-    }
-  }, [deployment]);
-
-  useEffect(() => {
     let documentsMap: { [documentId: string]: Document } = {};
+    let outputFilesMap: OutputFiles = {};
+
     (conversation?.messages ?? []).forEach((message) => {
-      documentsMap =
-        message.documents?.reduce<{ [documentId: string]: Document }>(
-          (idToDoc, doc) => ({ ...idToDoc, [doc.document_id ?? '']: doc }),
-          {}
-        ) ?? {};
+      message.documents?.forEach((doc) => {
+        const docId = doc.document_id ?? '';
+        documentsMap[docId] = doc;
+
+        const toolName = (doc.tool_name ?? '').toLowerCase();
+
+        if (toolName === TOOL_PYTHON_INTERPRETER_ID) {
+          const { outputFile } = parsePythonInterpreterToolFields(doc);
+
+          if (outputFile) {
+            outputFilesMap[outputFile.filename] = {
+              name: outputFile.filename,
+              data: outputFile.b64_data,
+              documentId: docId,
+            };
+          }
+        }
+      });
       message.citations?.forEach((citation) => {
         const startEndKey = createStartEndKey(citation.start ?? 0, citation.end ?? 0);
         const documents = citation.document_ids?.map((id) => documentsMap[id]) ?? [];
         addCitation(message.generation_id ?? '', startEndKey, documents);
       });
     });
-  }, [conversation]);
 
-  useEffect(() => {
-    if (!isLangchainModeOn) return;
-    setMessage('You are using an experimental langchain multihop flow. There will be bugs.');
-  }, [isLangchainModeOn]);
+    saveOutputFiles(outputFilesMap);
+  }, [conversation?.id, setConversation]);
 
   return (
     <Layout>

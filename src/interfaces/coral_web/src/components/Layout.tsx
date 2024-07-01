@@ -1,13 +1,17 @@
 import { Transition } from '@headlessui/react';
 import { capitalize } from 'lodash';
-import React, { Children, PropsWithChildren, useContext } from 'react';
+import React, { Children, PropsWithChildren, useContext, useEffect, useState } from 'react';
 
-import { ConfigurationDrawer } from '@/components/Conversation/ConfigurationDrawer';
+import { DeploymentsDropdown } from '@/components/DeploymentsDropdown';
+import { EditEnvVariablesButton } from '@/components/EditEnvVariablesButton';
+import { NavigationUserMenu } from '@/components/NavigationUserMenu';
+import { SettingsDrawer } from '@/components/Settings/SettingsDrawer';
 import { Banner } from '@/components/Shared';
 import { NavigationBar } from '@/components/Shared/NavigationBar/NavigationBar';
 import { PageHead } from '@/components/Shared/PageHead';
 import { BannerContext } from '@/context/BannerContext';
 import { useIsDesktop } from '@/hooks/breakpoint';
+import { useSession } from '@/hooks/session';
 import { useSettingsStore } from '@/stores';
 import { cn } from '@/utils/cn';
 
@@ -28,12 +32,13 @@ type Props = {
  * It shows the navigation bar, the left drawer and main content.
  * On small devices (e.g. mobile), the left drawer and main section are stacked vertically.
  */
-export const Layout: React.FC<Props> = ({ title = 'Coral', children }) => {
+export const Layout: React.FC<Props> = ({ title = 'Chat', children }) => {
   const { message: bannerMessage } = useContext(BannerContext);
   const {
     settings: { isConvListPanelOpen, isMobileConvListPanelOpen },
   } = useSettingsStore();
   const isDesktop = useIsDesktop();
+  const { session } = useSession();
 
   let leftDrawerElement: React.ReactNode = null;
   let mainElement: React.ReactNode = null;
@@ -54,15 +59,30 @@ export const Layout: React.FC<Props> = ({ title = 'Coral', children }) => {
     }
   });
 
+  const [userMenu, setUserMenu] = useState<React.ReactNode>(null);
+
+  useEffect(() => {
+    if (session && session.email) {
+      setUserMenu(<NavigationUserMenu userEmail={session.email} />);
+    }
+  }, [session]);
+
   return (
     <>
       <PageHead title={capitalize(title)} />
       <div className="flex h-screen w-full flex-1 flex-col gap-3 bg-secondary-100 p-3">
-        <NavigationBar />
+        <NavigationBar>
+          <span className="flex items-center gap-x-2">
+            <DeploymentsDropdown />
+            <EditEnvVariablesButton className="py-0" />
+            {userMenu}
+          </span>
+        </NavigationBar>
         {bannerMessage && <Banner size="sm">{bannerMessage}</Banner>}
 
         <div className={cn('relative flex h-full flex-grow flex-nowrap overflow-hidden')}>
           <Transition
+            as="div"
             show={isMobileConvListPanelOpen || (isConvListPanelOpen && isDesktop)}
             enterFrom={cn(
               '-translate-x-full lg:translate-x-0',
@@ -119,7 +139,7 @@ export const Layout: React.FC<Props> = ({ title = 'Coral', children }) => {
               {mainElement}
             </section>
           </Transition>
-          <ConfigurationDrawer />
+          <SettingsDrawer />
         </div>
       </div>
     </>
